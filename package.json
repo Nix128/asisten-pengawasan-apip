@@ -1,15 +1,22 @@
 {
-  "name": "nodejs",
+  "name": "ai-assistant-pengawasan",
   "version": "1.0.0",
-  "description": "",
+  "description": "AI Assistant for Surveillance using Gemini 1.5 Pro and Supabase on Netlify",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js"
   },
   "keywords": [],
-  "author": "",
+  "author": "Your Name (Optional)",
   "license": "ISC",
   "dependencies": {
-    "@types/node": "^22.13.11"
+    "@google/generative-ai": "^0.14.1",
+    "@supabase/supabase-js": "^2.43.4",
+    "formidable": "^3.5.1",
+    "mammoth": "^1.6.0",
+    "pdf-parse": "^1.1.1"
+  },
+  "devDependencies": {
+    "netlify-cli": "^22.3.0"
   }
 }

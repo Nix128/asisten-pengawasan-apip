@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Asisten Pengawasan</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>AI Asisten Pengawasan</h1>
+
+        <div class="chat-window" id="chatWindow">
+            </div>
+
+        <div class="chat-input">
+            <input type="text" id="chatInput" placeholder="Ketik pesan Anda...">
+            <button id="sendButton">Kirim</button>
+        </div>
+
+        <hr/>
+
+        <h2>Unggah Dokumen ke Knowledge Base</h2>
+        <input type="text" id="documentNameInput" placeholder="Nama Dokumen (Contoh: Laporan Keamanan Q1)">
+        <input type="file" id="documentFileInput" accept=".pdf,.doc,.docx,.txt"> <textarea id="documentContentInput" placeholder="Atau tempel konten teks dokumen di sini jika tidak mengunggah file..." rows="10"></textarea>
+        <button id="uploadDocumentButton">Unggah Dokumen</button>
+        <p id="uploadStatus"></p>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

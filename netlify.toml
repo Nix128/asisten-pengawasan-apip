@@ -1,0 +1,14 @@
+[build]
+  command = "npm install" # Perintah untuk menginstal dependensi saat Netlify membangun proyek
+  functions = "netlify/functions" # Lokasi fungsi Netlify Anda
+  publish = "public" # Folder yang akan disajikan sebagai frontend aplikasi Anda
+
+[[redirects]]
+  from = "/.netlify/functions/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
