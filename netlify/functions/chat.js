@@ -15,14 +15,14 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY
 );
 
-// Fungsi untuk mendapatkan embedding (vektor numerik) dari teks menggunakan model embedding Gemini
+// Fungsi untuk mendapatkan embedding (vektor numerik) dari teks
 async function getEmbedding(text) {
   try {
     const { embedding } = await embeddingModel.embedContent(text);
-    return embedding.values; // Mengembalikan array nilai-nilai vektor
+    return embedding.values;
   } catch (error) {
     console.error('Error getting embedding:', error);
-    throw error; // Lempar error agar bisa ditangani di pemanggil
+    throw error;
   }
 }
 
@@ -34,10 +34,8 @@ exports.handler = async function(event, context) {
   }
 
   try {
-    // Parse body request JSON untuk mendapatkan prompt dan user ID
     const { prompt, userId } = JSON.parse(event.body);
 
-    // Validasi: prompt tidak boleh kosong
     if (!prompt) {
       return { statusCode: 400, body: 'Missing prompt in request body' };
     }
@@ -45,58 +43,70 @@ exports.handler = async function(event, context) {
     // --- Langkah 1: Buat embedding dari prompt (pertanyaan) pengguna ---
     const promptEmbedding = await getEmbedding(prompt);
 
-    // --- Langkah 2: Cari dokumen paling relevan di knowledge_base menggunakan pencarian kesamaan vektor ---
-    // Panggil fungsi RPC `match_documents` yang telah kita buat di Supabase SQL Editor.
-    // Fungsi ini akan mencari embedding yang paling mirip di tabel knowledge_base.
+    // --- Langkah 2: Cari dokumen paling relevan di knowledge_base (UPAYA RAG) ---
+    // Panggil fungsi RPC `match_documents`
     const { data: kbData, error: kbError } = await supabase.rpc('match_documents', {
-        query_embedding: promptEmbedding, // Embedding dari pertanyaan pengguna
-        match_threshold: 0.7,             // Ambang batas kesamaan (misal: 0.7 berarti 70% mirip atau lebih)
-                                          // Anda bisa menyesuaikan nilai ini jika hasil pencarian terlalu banyak/sedikit
-        match_count: 5                    // Jumlah dokumen paling relevan yang ingin diambil
+        query_embedding: promptEmbedding,
+        match_threshold: 0.7, // Ambang batas kesamaan: 0.7 (70% mirip atau lebih). Bisa disesuaikan.
+        match_count: 3        // Jumlah dokumen paling relevan yang ingin diambil dari KB
     });
 
-    // Tangani error jika terjadi saat mencari di Supabase knowledge base
     if (kbError) {
       console.error('Supabase KB search error:', kbError);
-      // Meskipun ada error, kita bisa memutuskan untuk tetap melanjutkan tanpa konteks dokumen
-      // atau mengembalikan error, tergantung kebijakan. Di sini kita lanjut tanpa konteks.
+      // Jika ada error database, kita akan anggap tidak ada konteks dari KB dan akan fallback
     }
 
     let contextText = '';
-    // Jika ada data yang ditemukan dari knowledge base, gabungkan kontennya menjadi satu string
+    // Tentukan panjang minimum konteks agar dianggap "cukup".
+    // Jika konteks yang ditemukan sangat pendek, mungkin tidak relevan.
+    const MIN_RELEVANT_CONTEXT_LENGTH = 50; // Misalnya, minimal 50 karakter teks relevan
+
     if (kbData && kbData.length > 0) {
-      contextText = kbData.map(doc => doc.content).join('\n---\n'); // Gabungkan dengan pemisah
-      console.log('Context from knowledge base:', contextText); // Untuk debugging di log Netlify
+      // Filter chunk yang mungkin kosong atau hanya spasi
+      const relevantChunks = kbData.filter(doc => doc.content && doc.content.trim().length > 0);
+      contextText = relevantChunks.map(doc => doc.content).join('\n---\n');
+      console.log('Context from knowledge base:', contextText); // Untuk debugging
     }
 
-    // --- Langkah 3: Bangun prompt akhir untuk Gemini 1.5 Pro dengan konteks yang diambil ---
-    const systemInstruction = `Anda adalah AI Asisten pengawasan. Jawab pertanyaan pengguna berdasarkan informasi yang diberikan. Jika informasi tidak tersedia dalam konteks, katakan bahwa Anda tidak memiliki informasi tersebut. Berikan jawaban yang ringkas dan langsung ke poin.`;
+    let finalResponse;
+    let currentSystemInstruction;
+    let currentFullPrompt;
 
-    let fullPrompt;
-    if (contextText) {
-      // Jika ada konteks dari knowledge base, tambahkan ke prompt
-      fullPrompt = `${systemInstruction}\n\nInformasi terkait:\n${contextText}\n\nPertanyaan pengguna: ${prompt}`;
+    // --- Implementasi Logika Dua Tahap: Knowledge Base Dulu, Baru Fallback ke Model Dasar ---
+    // Jika konteks yang ditemukan cukup panjang dan ada data dari KB
+    if (contextText.length > MIN_RELEVANT_CONTEXT_LENGTH && !kbError) {
+      // Logic 1: Gunakan Knowledge Base (RAG)
+      currentSystemInstruction = `Anda adalah AI Asisten pengawasan yang bertugas menganalisis dan merangkum informasi dari dokumen yang disediakan.
+      Ikuti instruksi berikut:
+      1. Jawab pertanyaan pengguna HANYA berdasarkan informasi yang terdapat dalam "Informasi terkait" yang diberikan.
+      2. Jika pertanyaan pengguna TIDAK DAPAT dijawab dengan informasi yang tersedia dalam konteks, katakan dengan sopan bahwa Anda "tidak memiliki informasi yang relevan dalam data pengawasan Anda untuk menjawab pertanyaan tersebut dari konteks yang ada". JANGAN MENGADA-NGADA jawaban.
+      3. Rangkum dan sintetiskan informasi dari konteks jika relevan.
+      4. Berikan jawaban yang jelas, akurat, dan langsung ke inti permasalahan.
+      5. Jaga nada bicara profesional dan informatif.`;
+
+      currentFullPrompt = `${currentSystemInstruction}\n\nInformasi terkait:\n${contextText}\n\nPertanyaan pengguna: ${prompt}`;
+      console.log('Using RAG prompt.'); // Untuk debugging
     } else {
-      // Jika tidak ada konteks, hanya berikan instruksi sistem dan pertanyaan pengguna
-      fullPrompt = `${systemInstruction}\n\nPertanyaan pengguna: ${prompt}`;
+      // Logic 2: Fallback ke Base Model AI (Gemini 1.5 Pro Last)
+      console.log('No sufficient context found in knowledge base or KB error. Falling back to base AI model.');
+      currentSystemInstruction = `Anda adalah AI Asisten pengawasan yang informatif, cerdas, dan membantu. Jawab pertanyaan pengguna dengan pengetahuan umum Anda. Jika Anda tidak yakin, berikan jawaban terbaik yang Anda bisa atau tanyakan klarifikasi. Berikan jawaban yang relevan dan berguna.`;
+
+      currentFullPrompt = `${currentSystemInstruction}\n\nPertanyaan pengguna: ${prompt}`;
     }
 
-    // --- Langkah 4: Panggil Gemini 1.5 Pro dengan prompt yang sudah lengkap ---
-    const result = await model.generateContent(fullPrompt);
-    const response = result.response.text(); // Ambil teks respons dari Gemini
+    // --- Panggil Gemini 1.5 Pro dengan prompt yang sesuai ---
+    const result = await model.generateContent(currentFullPrompt);
+    finalResponse = result.response.text(); // Ambil teks respons dari Gemini
 
-    // --- Langkah 5: Simpan histori percakapan ke Supabase ---
-    // Ini membantu melacak interaksi dan bisa digunakan untuk fitur lanjutan (misal: riwayat chat)
+    // --- Simpan histori percakapan ke Supabase ---
     const { error: dbError } = await supabase
       .from('conversation_history')
       .insert({
-        user_id: userId || null, // Gunakan ID pengguna jika ada, jika tidak null
-        prompt: prompt,          // Prompt asli dari pengguna
-        response: response,      // Respons dari AI
-        // timestamp akan otomatis diisi oleh default value di tabel Supabase
+        user_id: userId || null,
+        prompt: prompt,
+        response: finalResponse // Simpan respons akhir, baik dari RAG maupun fallback
       });
 
-    // Tangani error jika terjadi saat menyimpan histori percakapan (tidak akan menghentikan respons ke user)
     if (dbError) {
       console.error('Error saving conversation history:', dbError);
     }
@@ -105,11 +115,10 @@ exports.handler = async function(event, context) {
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ response: response })
+      body: JSON.stringify({ response: finalResponse })
     };
 
   } catch (error) {
-    // Menangkap error umum dan mengembalikan respons error ke frontend
     console.error('Error in chat function:', error);
     return {
       statusCode: 500,
