@@ -1,10 +1,9 @@
-// netlify/functions/upload-document.js
 const { createClient } = require('@supabase/supabase-js');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const pdf = require('pdf-parse'); // Untuk PDF
-const mammoth = require('mammoth'); // Untuk DOCX
-const formidable = require('formidable'); // Untuk parsing form data file upload
-const fs = require('fs'); // Untuk membaca file sementara yang diunggah
+const pdf = require('pdf-parse');
+const mammoth = require('mammoth');
+const formidable = require('formidable');
+const fs = require('fs');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -14,7 +13,6 @@ const supabase = createClient(
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const embeddingModel = genAI.getGenerativeModel({ model: 'text-embedding-004' });
 
-// Fungsi untuk mendapatkan embedding dari teks
 async function getEmbedding(text) {
   try {
     const { embedding } = await embeddingModel.embedContent(text);
@@ -25,18 +23,15 @@ async function getEmbedding(text) {
   }
 }
 
-// Fungsi sederhana untuk membagi teks menjadi chunk.
 function chunkText(text, chunkSize = 1000, overlap = 100) {
-    const chunks = [];
-    let i = 0;
-    while (i < text.length) {
-        let chunk = text.substring(i, Math.min(i + chunkSize, text.length));
-        chunks.push(chunk);
-        if (i + chunkSize >= text.length && i < text.length) break; // Berhenti jika sudah di akhir teks
-        i += (chunkSize - overlap);
-        if (i < 0) i = 0; // Pastikan i tidak negatif
-    }
-    return chunks;
+  const chunks = [];
+  let i = 0;
+  while (i < text.length) {
+    const end = Math.min(i + chunkSize, text.length);
+    chunks.push(text.substring(i, end));
+    i += (chunkSize - overlap);
+  }
+  return chunks.filter(chunk => chunk.trim().length > 0);
 }
 
 exports.handler = async function(event, context) {
@@ -44,117 +39,110 @@ exports.handler = async function(event, context) {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
-  // Penting: Pastikan Replit sudah menginstal 'formidable' di package.json
-  // Formidable digunakan untuk mengurai data multipart/form-data dari unggahan file
-  const form = formidable();
-
-  let fields;
-  let files;
+  const form = formidable({ multiples: true });
+  let fields, files;
 
   try {
-    // Netlify Functions mengirim body sebagai string, perlu Buffer untuk formidable
-    // event.body bisa berupa string atau base64 encoded
     const bodyBuffer = Buffer.from(event.body, event.isBase64Encoded ? 'base64' : 'utf8');
-
-    // form.parse tidak mendukung callback dengan async/await, jadi kita pakai Promise
     [fields, files] = await new Promise((resolve, reject) => {
       form.parse(bodyBuffer, (err, flds, fls) => {
         if (err) return reject(err);
         resolve([flds, fls]);
       });
     });
-
   } catch (parseError) {
     console.error('Error parsing form data:', parseError);
-    return { statusCode: 400, body: JSON.stringify({ error: 'Failed to parse form data. ' + parseError.message }) };
+    return { statusCode: 400, body: JSON.stringify({ error: 'Failed to parse form data' }) };
   }
 
-  // Ambil documentName dari fields yang di-parse
   const documentName = fields.documentName ? fields.documentName[0] : null;
-  const uploadedFile = files.documentFile ? files.documentFile[0] : null; // Ambil file yang diunggah
-  const rawContentInput = fields.documentContent ? fields.documentContent[0] : null; // Konten teks jika tidak ada file
-
-  let documentContent = '';
+  const contentText = fields.content ? fields.content[0] : null;
+  const uploadedFiles = files.files || [];
 
   if (!documentName) {
-    return { statusCode: 400, body: JSON.stringify({ error: 'Document name is required.' }) };
+    return { statusCode: 400, body: JSON.stringify({ error: 'Document name is required' }) };
   }
 
-  if (uploadedFile) {
-    const filePath = uploadedFile.filepath; // Path sementara file yang diunggah oleh formidable
+  let allChunks = [];
+
+  // Process text content
+  if (contentText) {
+    const chunks = chunkText(contentText);
+    for (const chunk of chunks) {
+      const embedding = await getEmbedding(chunk);
+      allChunks.push({
+        document_name: documentName,
+        content: chunk,
+        embedding
+      });
+    }
+  }
+
+  // Process uploaded files
+  for (const file of uploadedFiles) {
+    const filePath = file.filepath;
+    let fileContent = '';
 
     try {
-      if (uploadedFile.mimetype === 'application/pdf') {
+      if (file.mimetype === 'application/pdf') {
         const dataBuffer = fs.readFileSync(filePath);
         const data = await pdf(dataBuffer);
-        documentContent = data.text;
-      } else if (uploadedFile.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-        // Untuk DOCX, mammoth perlu membaca file dari path
+        fileContent = data.text;
+      } else if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
         const result = await mammoth.extractRawText({ path: filePath });
-        documentContent = result.value; // Teks yang diekstrak
-      } else if (uploadedFile.mimetype === 'text/plain') {
-        documentContent = fs.readFileSync(filePath, 'utf8');
+        fileContent = result.value;
+      } else if (file.mimetype === 'text/plain') {
+        fileContent = fs.readFileSync(filePath, 'utf8');
       } else {
-        // Jika jenis file tidak didukung
-        return { statusCode: 400, body: JSON.stringify({ error: `Unsupported file type: ${uploadedFile.mimetype}. Please upload PDF, DOCX, or TXT.` }) };
+        console.warn(`Unsupported file type: ${file.mimetype}`);
+        continue;
       }
-    } catch (fileProcessError) {
-      console.error('Error processing uploaded file:', fileProcessError);
-      return { statusCode: 500, body: JSON.stringify({ error: `Failed to process uploaded file: ${fileProcessError.message}` }) };
+
+      const chunks = chunkText(fileContent);
+      for (const chunk of chunks) {
+        const embedding = await getEmbedding(chunk);
+        allChunks.push({
+          document_name: documentName,
+          content: chunk,
+          embedding
+        });
+      }
+    } catch (fileError) {
+      console.error(`Error processing file ${file.originalFilename}:`, fileError);
     }
-  } else if (rawContentInput) {
-    // Jika tidak ada file yang diunggah, gunakan konten dari textarea
-    documentContent = rawContentInput;
-  } else {
-    // Jika tidak ada file dan tidak ada konten teks
-    return { statusCode: 400, body: JSON.stringify({ error: 'No document file uploaded or content provided.' }) };
   }
 
-  if (!documentContent.trim()) {
-      return { statusCode: 400, body: JSON.stringify({ error: 'Extracted document content is empty.' }) };
+  if (allChunks.length === 0) {
+    return { statusCode: 400, body: JSON.stringify({ error: 'No valid content found' }) };
   }
 
-  // --- Lanjutkan dengan chunking dan embedding seperti sebelumnya ---
   try {
-    const textChunks = chunkText(documentContent, 1000, 100); // Sesuaikan ukuran chunk
-    const recordsToInsert = [];
+    // Insert in batches of 100
+    const batchSize = 100;
+    for (let i = 0; i < allChunks.length; i += batchSize) {
+      const batch = allChunks.slice(i, i + batchSize);
+      const { error } = await supabase
+        .from('knowledge_base')
+        .insert(batch);
 
-    if (textChunks.length === 0) {
-        return { statusCode: 400, body: JSON.stringify({ error: 'No text chunks could be created from the document.' }) };
-    }
-
-    for (const chunk of textChunks) {
-      if (chunk.trim()) { // Pastikan chunk tidak kosong
-          const embedding = await getEmbedding(chunk);
-          recordsToInsert.push({
-            document_name: documentName,
-            content: chunk,
-            embedding: embedding,
-          });
-      }
-    }
-
-    if (recordsToInsert.length === 0) {
-        return { statusCode: 400, body: JSON.stringify({ error: 'No valid chunks found to insert into knowledge base.' }) };
-    }
-
-    const { error } = await supabase
-      .from('knowledge_base')
-      .insert(recordsToInsert);
-
-    if (error) {
+      if (error) {
         console.error('Supabase insert error:', error);
-        return { statusCode: 500, body: JSON.stringify({ error: `Failed to insert into Supabase: ${error.message}` }) };
+        return { 
+          statusCode: 500, 
+          body: JSON.stringify({ error: `Failed to insert into Supabase: ${error.message}` }) 
+        };
+      }
     }
 
     return {
       statusCode: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: `Document '${documentName}' uploaded and processed successfully with ${recordsToInsert.length} chunks!` })
+      body: JSON.stringify({ 
+        message: `Document '${documentName}' processed successfully with ${allChunks.length} chunks` 
+      })
     };
 
   } catch (error) {
-    console.error('Error processing document for knowledge base:', error);
+    console.error('Error processing document:', error);
     return {
       statusCode: 500,
       body: JSON.stringify({ error: error.message || 'Internal Server Error' })
