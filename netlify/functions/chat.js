@@ -3,7 +3,6 @@ const { createClient } = require('@supabase/supabase-js');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro-latest' });
-const embeddingModel = genAI.getGenerativeModel({ model: 'text-embedding-004' });
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -12,40 +11,25 @@ const supabase = createClient(
 
 async function getEmbedding(text) {
   try {
-    const { embedding } = await embeddingModel.embedContent(text);
-    return embedding.values;
+    const model = genAI.getGenerativeModel({ model: 'embedding-001' });
+    const result = await model.embedContent(text);
+    return result.embedding.values;
   } catch (error) {
     console.error('Error getting embedding:', error);
     throw error;
   }
 }
 
-// Enhanced APIP Analysis Prompt
 const APIP_SYSTEM_PROMPT = `Anda adalah AI Asisten Pengawasan APIP yang bertugas:
-1. Menganalisis data dan dokumen untuk menemukan ketidakpatuhan terhadap:
-   - Peraturan perundang-undangan
-   - Standar Operasional Prosedur (SOP)
-   - Prinsip tata kelola yang baik
+1. Menganalisis data dan dokumen untuk menemukan ketidakpatuhan
 2. Mengidentifikasi potensi temuan dan risiko
-3. Memberikan rekomendasi perbaikan yang spesifik, terukur, dan dapat ditindaklanjuti
-4. Berdasarkan pada kerangka kerja pengawasan:
-   - UU No. 15 Tahun 2004 tentang Pemeriksaan Pengelolaan Keuangan Negara
-   - Standar Pemeriksaan Keuangan Negara (SPKN)
-   - Prinsip 3E (Ekonomi, Efisiensi, Efektivitas)
-   - COSO Internal Control Framework
+3. Memberikan rekomendasi perbaikan
+4. Berdasarkan pada kerangka kerja pengawasan
 
 Analisis harus mencakup:
 - Kesesuaian dengan peraturan
 - Efektivitas pengendalian internal
 - Efisiensi penggunaan sumber daya
-- Pencapaian tujuan program/kegiatan
-- Identifikasi indikasi penyimpangan
-
-Langkah analisis:
-1. Identifikasi masalah berdasarkan data
-2. Analisis akar penyebab
-3. Evaluasi dampak
-4. Rekomendasi solusi berbasis bukti
 
 Format respons:
 ### Temuan
@@ -78,9 +62,14 @@ exports.handler = async function(event, context) {
         match_count: 5
       });
 
-      if (!kbError && kbData && kbData.length > 0) {
+      if (kbError) {
+        console.error('Error matching documents:', kbError);
+        throw kbError;
+      }
+
+      if (kbData && kbData.length > 0) {
         contextText = kbData.map(doc => 
-          `[DOKUMEN: ${doc.document_name}]\n${doc.content}`
+          `[DOKUMEN: ${doc.document_name}]\n${doc.content.substring(0, 500)}...`
         ).join('\n\n');
       }
     }
@@ -109,17 +98,25 @@ exports.handler = async function(event, context) {
       }
     });
 
-    const responseText = result.response.text();
+    if (!result.response) {
+      throw new Error('No response from Gemini API');
+    }
+
+    const responseText = await result.response.text();
 
     // Save to conversation history
-    const userId = "admin"; // In a real app, get from session
-    await supabase
+    const userId = "admin";
+    const { error: insertError } = await supabase
       .from('conversation_history')
       .insert({
         user_id: userId,
         prompt: prompt || "Analisis dokumen",
         response: responseText
       });
+
+    if (insertError) {
+      console.error('Error saving history:', insertError);
+    }
 
     return {
       statusCode: 200,

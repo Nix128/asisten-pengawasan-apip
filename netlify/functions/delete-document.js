@@ -10,13 +10,17 @@ exports.handler = async function(event, context) {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
-  const { id } = event.queryStringParameters;
+  const { document_name } = event.queryStringParameters;
+
+  if (!document_name) {
+    return { statusCode: 400, body: JSON.stringify({ error: 'Document name is required' }) };
+  }
 
   try {
     const { error } = await supabase
       .from('knowledge_base')
       .delete()
-      .eq('document_name', id); // In our case, id is document name
+      .eq('document_name', document_name);
 
     if (error) throw error;
 

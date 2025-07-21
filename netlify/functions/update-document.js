@@ -7,12 +7,12 @@ const supabase = createClient(
 );
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const embeddingModel = genAI.getGenerativeModel({ model: 'text-embedding-004' });
 
 async function getEmbedding(text) {
   try {
-    const { embedding } = await embeddingModel.embedContent(text);
-    return embedding.values;
+    const model = genAI.getGenerativeModel({ model: 'embedding-001' });
+    const result = await model.embedContent(text);
+    return result.embedding.values;
   } catch (error) {
     console.error('Error getting embedding:', error);
     throw error;
@@ -27,11 +27,9 @@ exports.handler = async function(event, context) {
   const { id, content } = JSON.parse(event.body);
 
   try {
-    // Get embedding for the updated content
     const embedding = await getEmbedding(content);
 
-    // Update the document chunk
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('knowledge_base')
       .update({ content, embedding })
       .eq('id', id);

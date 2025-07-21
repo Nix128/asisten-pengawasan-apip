@@ -9,7 +9,7 @@ exports.handler = async function(event, context) {
   try {
     const { data, error } = await supabase
       .from('knowledge_base')
-      .select('document_name, created_at')
+      .select('id, document_name, content, created_at')
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -21,28 +21,15 @@ exports.handler = async function(event, context) {
         existing.chunk_count++;
       } else {
         acc.push({
-          id: item.document_name, // For simplicity
+          id: item.id,
           document_name: item.document_name,
           created_at: item.created_at,
           chunk_count: 1,
-          content: '' // Will be filled later
+          content: item.content.substring(0, 300) + (item.content.length > 300 ? '...' : '')
         });
       }
       return acc;
     }, []);
-
-    // Get sample content for each document
-    for (const doc of documents) {
-      const { data: sample, error: sampleError } = await supabase
-        .from('knowledge_base')
-        .select('content')
-        .eq('document_name', doc.document_name)
-        .limit(1);
-
-      if (!sampleError && sample.length > 0) {
-        doc.content = sample[0].content;
-      }
-    }
 
     return {
       statusCode: 200,

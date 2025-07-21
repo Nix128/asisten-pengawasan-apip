@@ -6,8 +6,6 @@ exports.handler = async function(event, context) {
   }
 
   const { username, password } = JSON.parse(event.body);
-
-  // In production, you should use a database
   const validUsername = process.env.ADMIN_USERNAME || 'admin';
   const validPasswordHash = process.env.ADMIN_PASSWORD_HASH;
 
@@ -19,7 +17,9 @@ exports.handler = async function(event, context) {
   }
 
   try {
-    if (username === validUsername && bcrypt.compareSync(password, validPasswordHash)) {
+    const isPasswordValid = await bcrypt.compare(password, validPasswordHash);
+
+    if (username === validUsername && isPasswordValid) {
       return {
         statusCode: 200,
         body: JSON.stringify({ 

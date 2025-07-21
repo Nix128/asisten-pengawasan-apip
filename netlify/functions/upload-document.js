@@ -4,6 +4,7 @@ const pdf = require('pdf-parse');
 const mammoth = require('mammoth');
 const formidable = require('formidable');
 const fs = require('fs');
+const util = require('util');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -11,12 +12,12 @@ const supabase = createClient(
 );
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const embeddingModel = genAI.getGenerativeModel({ model: 'text-embedding-004' });
 
 async function getEmbedding(text) {
   try {
-    const { embedding } = await embeddingModel.embedContent(text);
-    return embedding.values;
+    const model = genAI.getGenerativeModel({ model: 'embedding-001' });
+    const result = await model.embedContent(text);
+    return result.embedding.values;
   } catch (error) {
     console.error('Error getting embedding:', error);
     throw error;
@@ -34,22 +35,26 @@ function chunkText(text, chunkSize = 1000, overlap = 100) {
   return chunks.filter(chunk => chunk.trim().length > 0);
 }
 
+// Convert formidable parse to promise
+const parseForm = (event) => {
+  return new Promise((resolve, reject) => {
+    const form = formidable({ multiples: true });
+    const bodyBuffer = Buffer.from(event.body, event.isBase64Encoded ? 'base64' : 'utf8');
+    form.parse(bodyBuffer, (err, fields, files) => {
+      if (err) reject(err);
+      else resolve({ fields, files });
+    });
+  });
+};
+
 exports.handler = async function(event, context) {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
-  const form = formidable({ multiples: true });
   let fields, files;
-
   try {
-    const bodyBuffer = Buffer.from(event.body, event.isBase64Encoded ? 'base64' : 'utf8');
-    [fields, files] = await new Promise((resolve, reject) => {
-      form.parse(bodyBuffer, (err, flds, fls) => {
-        if (err) return reject(err);
-        resolve([flds, fls]);
-      });
-    });
+    ({ fields, files } = await parseForm(event));
   } catch (parseError) {
     console.error('Error parsing form data:', parseError);
     return { statusCode: 400, body: JSON.stringify({ error: 'Failed to parse form data' }) };
@@ -57,7 +62,7 @@ exports.handler = async function(event, context) {
 
   const documentName = fields.documentName ? fields.documentName[0] : null;
   const contentText = fields.content ? fields.content[0] : null;
-  const uploadedFiles = files.files || [];
+  const uploadedFiles = Array.isArray(files.files) ? files.files : [files.files].filter(Boolean);
 
   if (!documentName) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Document name is required' }) };
@@ -80,6 +85,8 @@ exports.handler = async function(event, context) {
 
   // Process uploaded files
   for (const file of uploadedFiles) {
+    if (!file || !file.filepath) continue;
+
     const filePath = file.filepath;
     let fileContent = '';
 
@@ -95,6 +102,12 @@ exports.handler = async function(event, context) {
         fileContent = fs.readFileSync(filePath, 'utf8');
       } else {
         console.warn(`Unsupported file type: ${file.mimetype}`);
+        continue;
+      }
+
+      // Skip empty files
+      if (!fileContent.trim()) {
+        console.warn(`File ${file.originalFilename} is empty`);
         continue;
       }
 
