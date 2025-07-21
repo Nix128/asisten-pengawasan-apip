@@ -5,7 +5,7 @@ const { createClient } = require('@supabase/supabase-js');
 // Inisialisasi Google Generative AI dengan API Key dari variabel lingkungan
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 // Pilih model Gemini 1.5 Pro untuk generasi teks
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro-latest' });
+const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 // Pilih model embedding untuk mengubah teks menjadi vektor numerik
 const embeddingModel = genAI.getGenerativeModel({ model: 'text-embedding-004' });
 
