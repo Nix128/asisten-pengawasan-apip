@@ -1,5 +1,8 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { createClient } = require('@supabase/supabase-js');
+const pdf = require('pdf-parse');
+const mammoth = require('mammoth');
+const fs = require('fs');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro-latest' });
@@ -20,6 +23,12 @@ async function getEmbedding(text) {
   }
 }
 
+// Fallback untuk ekstraksi teks dari PDF
+function extractTextFromPDFFallback(buffer) {
+  const text = buffer.toString('ascii', 0, 1024 * 1024); // Ambil 1MB pertama
+  return text.replace(/[^\x20-\x7E]/g, '');
+}
+
 const APIP_SYSTEM_PROMPT = `Anda adalah AI Asisten Pengawasan APIP yang bertugas:
 1. Menganalisis data dan dokumen untuk menemukan ketidakpatuhan
 2. Mengidentifikasi potensi temuan dan risiko
@@ -38,6 +47,31 @@ Format respons:
 [Analisis mendalam]
 ### Rekomendasi
 [Rekomendasi spesifik]`;
+
+// Fungsi untuk membaca konten file
+async function readFileContent(filePath, mimetype) {
+  try {
+    if (mimetype === 'application/pdf') {
+      const dataBuffer = fs.readFileSync(filePath);
+      try {
+        const data = await pdf(dataBuffer);
+        return data.text;
+      } catch (pdfError) {
+        console.error('PDF parse error, using fallback:', pdfError);
+        return extractTextFromPDFFallback(dataBuffer);
+      }
+    } else if (mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      const result = await mammoth.extractRawText({ path: filePath });
+      return result.value;
+    } else if (mimetype === 'text/plain') {
+      return fs.readFileSync(filePath, 'utf8');
+    }
+    return '';
+  } catch (error) {
+    console.error('Error reading file:', error);
+    return 'Konten tidak dapat dibaca';
+  }
+}
 
 exports.handler = async function(event, context) {
   if (event.httpMethod !== 'POST') {
@@ -81,11 +115,16 @@ exports.handler = async function(event, context) {
       fullPrompt += `\n\nINFORMASI TERKAIT:\n${contextText}`;
     }
 
+    // Process uploaded files in chat
     if (files.length > 0) {
-      fullPrompt += `\n\nDokumen yang diunggah: ${files.join(', ')}`;
+      fullPrompt += `\n\nDokumen yang diupload pengguna:`;
+      for (const file of files) {
+        const content = await readFileContent(file.path, file.mimetype);
+        fullPrompt += `\n\n[FILE: ${file.name}]\n${content.substring(0, 1000)}...`;
+      }
     }
 
-    fullPrompt += `\n\nPERTANYAAN: ${prompt || 'Analisis dokumen yang diunggah'}`;
+    fullPrompt += `\n\nPERTANYAAN: ${prompt || 'Analisis dokumen yang diupload'}`;
 
     // Generate response
     const result = await model.generateContent({

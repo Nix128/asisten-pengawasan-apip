@@ -35,12 +35,19 @@ function chunkText(text, chunkSize = 1000, overlap = 100) {
   return chunks.filter(chunk => chunk.trim().length > 0);
 }
 
+// Fallback untuk ekstraksi teks dari PDF
+function extractTextFromPDFFallback(buffer) {
+  // Coba ambil teks dari buffer (hanya karakter ASCII)
+  const text = buffer.toString('ascii', 0, 1024 * 1024); // Ambil 1MB pertama
+  // Hapus karakter non-ASCII dan kontrol
+  return text.replace(/[^\x20-\x7E]/g, '');
+}
+
 // Convert formidable parse to promise
 const parseForm = (event) => {
   return new Promise((resolve, reject) => {
-    const form = formidable({ multiples: true });
-    const bodyBuffer = Buffer.from(event.body, event.isBase64Encoded ? 'base64' : 'utf8');
-    form.parse(bodyBuffer, (err, fields, files) => {
+    const form = new formidable.IncomingForm();
+    form.parse(event, (err, fields, files) => {
       if (err) reject(err);
       else resolve({ fields, files });
     });
@@ -52,16 +59,22 @@ exports.handler = async function(event, context) {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
+  // Handle binary file upload
+  if (event.isBase64Encoded) {
+    event.body = Buffer.from(event.body, 'base64').toString('binary');
+  }
+
   let fields, files;
   try {
+    // Parse form data
     ({ fields, files } = await parseForm(event));
   } catch (parseError) {
     console.error('Error parsing form data:', parseError);
     return { statusCode: 400, body: JSON.stringify({ error: 'Failed to parse form data' }) };
   }
 
-  const documentName = fields.documentName ? fields.documentName[0] : null;
-  const contentText = fields.content ? fields.content[0] : null;
+  const documentName = fields.documentName ? fields.documentName : null;
+  const contentText = fields.content ? fields.content : null;
   const uploadedFiles = Array.isArray(files.files) ? files.files : [files.files].filter(Boolean);
 
   if (!documentName) {
@@ -93,8 +106,13 @@ exports.handler = async function(event, context) {
     try {
       if (file.mimetype === 'application/pdf') {
         const dataBuffer = fs.readFileSync(filePath);
-        const data = await pdf(dataBuffer);
-        fileContent = data.text;
+        try {
+          const data = await pdf(dataBuffer);
+          fileContent = data.text;
+        } catch (pdfError) {
+          console.error('PDF parse error, using fallback:', pdfError);
+          fileContent = extractTextFromPDFFallback(dataBuffer);
+        }
       } else if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
         const result = await mammoth.extractRawText({ path: filePath });
         fileContent = result.value;
