@@ -3,7 +3,12 @@
   functions = "netlify/functions"
   publish = "public"
 
-# Versi Node.js digunakan di Netlify melalui file `.nvmrc` atau di environment, bukan dari toml.
+# Versi Node.js digunakan di Netlify melalui file `.nvmrc` atau di environment, bukan dari toml.[build]
+  functions = "netlify/functions"
+  publish = "public"
+
+[dev]
+  functions = "netlify/functions"
 # Jadi 'NODE_VERSION = "18"' dihapus karena tidak valid di bagian ini.
 
 [functions]
