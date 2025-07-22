@@ -2,16 +2,28 @@
   command = "npm install"
   functions = "netlify/functions"
   publish = "public"
+  # Menentukan versi Node.js yang akan digunakan oleh Netlify
+  # untuk proses build dan juga untuk menjalankan fungsi-fungsi Anda.
+  # Node.js 18.x mendukung sintaks JavaScript modern (ES6+) seperti 'const'.
+  NODE_VERSION = "18"
 
 [functions]
+  # Bundler yang digunakan untuk fungsi-fungsi Anda (sudah ada).
   node_bundler = "esbuild"
+  # Memastikan runtime Node.js yang sesuai dengan versi yang ditentukan di atas
+  # untuk eksekusi fungsi.
+  node_runtime = "nodejs18.x"
 
-# Perintah ini memberitahu Netlify untuk memberikan waktu lebih
-# khusus untuk fungsi process-document
+# Konfigurasi spesifik untuk fungsi 'process-document'
+# Ini memberikan waktu eksekusi yang lebih lama (25 detik) untuk fungsi ini,
+# yang mungkin diperlukan untuk pemrosesan file besar.
 [functions."process-document"]
-  timeout = 25 # Naikkan timeout menjadi 25 detik
+  timeout = 25
 
+# Konfigurasi pengalihan (redirects) untuk API Anda.
+# Ini mengarahkan semua permintaan ke '/api/*' ke fungsi Netlify yang sesuai.
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
+
