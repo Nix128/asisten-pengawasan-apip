@@ -1,32 +1,25 @@
 {
   "name": "ai-asisten-pengawasan",
   "version": "1.0.0",
-  "description": "AI Agent untuk Analisis Pengawasan APIP dengan arsitektur serverless.",
+  "description": "...",
   "main": "index.js",
   "scripts": {
-    "start": "netlify dev"
+    "start": "netlify dev",
+    "deploy": "netlify deploy --prod"
   },
-  "keywords": [
-    "ai",
-    "pengawasan",
-    "netlify",
-    "supabase",
-    "gemini",
-    "serverless"
-  ],
-  "author": "Nixon",
+  "keywords": [],
+  "author": "",
   "license": "ISC",
   "dependencies": {
-    "@google/generative-ai": "^0.14.1",
-    "@supabase/supabase-js": "^2.43.4",
-    "dotenv": "^16.4.5",
-    "googleapis": "^137.1.0",
-    "mammoth": "^1.7.2",
-    "pdf-parse": "^1.1.1",
-    "xlsx": "^0.18.5"
+    "@google/generative-ai": "^0.1.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "dotenv": "^16.3.1",
+    "googleapis": "^129.0.0",
+    "mammoth": "^1.6.0",
+    "pdf-parse": "^1.1.1"
   },
-  
-  "devDependencies": {
-    "netlify-cli": "^22.3.0"
+  "engines": {
+    "node": "18.x"
   }
 }
+
