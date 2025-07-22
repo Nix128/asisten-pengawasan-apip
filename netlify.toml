@@ -5,3 +5,11 @@
 
 [functions]
   node_bundler = "esbuild"
+
+# -- Tambahkan blok ini --
+# Aturan ini secara resmi memberitahu Netlify:
+# "Setiap permintaan yang datang ke /api/sesuatu, teruskan ke fungsi /.netlify/functions/sesuatu"
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
