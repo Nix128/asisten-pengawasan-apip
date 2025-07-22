@@ -1,16 +1,17 @@
 [build]
-  command = "npm install"
+  command = "npm install && npm run build"  # Disarankan untuk menambahkan build command
   functions = "netlify/functions"
   publish = "public"
 
 [functions]
   node_bundler = "esbuild"
-  timeout = 30 # Timeout global 30 detik
+  timeout = 30 # dalam detik
 
-[functions."process-document"]
-  timeout = 30 # Timeout khusus untuk process-document
+[functions.process-document]  # Mengubah tanda kutip menjadi format standar
+  timeout = 30
 
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
+  force = true  # Disarankan menambahkan ini
