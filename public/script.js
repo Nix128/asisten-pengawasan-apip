@@ -1,6 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // --- Element Selectors ---
-    // Mengambil semua elemen interaktif dari DOM untuk digunakan
+    // Element Selectors
     const sidebar = document.getElementById('sidebar');
     const menuToggleBtn = document.getElementById('menu-toggle-btn');
     const newChatBtn = document.getElementById('new-chat-btn');
@@ -15,43 +14,42 @@ document.addEventListener('DOMContentLoaded', () => {
     const contextUploadBtn = document.getElementById('context-upload-btn');
     const contextUploadInput = document.getElementById('context-upload-input');
 
-    // --- Session Management ---
-    // Mengambil ID sesi aktif dari penyimpanan lokal, atau membuat yang baru jika tidak ada.
+    // Session Management
     let sessionId = localStorage.getItem('active_session_id') || crypto.randomUUID();
     localStorage.setItem('active_session_id', sessionId);
 
-    // --- Utility Functions ---
-    // Fungsi untuk menambahkan pesan ke jendela chat dengan gaya yang sesuai.
+    // Utility Functions
     const addMessageToUI = (sender, text) => {
         const messageDiv = document.createElement('div');
         messageDiv.classList.add('message', sender);
-        // Mengubah baris baru (\n) menjadi tag <br> agar tampil di HTML
         messageDiv.innerHTML = text.replace(/\n/g, '<br>');
         chatWindow.appendChild(messageDiv);
-        chatWindow.scrollTop = chatWindow.scrollHeight; // Auto-scroll ke bawah
+        chatWindow.scrollTop = chatWindow.scrollHeight;
         return messageDiv;
     };
 
-    // Fungsi untuk menampilkan atau menyembunyikan indikator loading.
     const showLoading = (show) => {
         loadingIndicator.style.display = show ? 'flex' : 'none';
         sendBtn.disabled = show;
         chatInput.disabled = show;
     };
 
-    // --- UI/UX Event Listeners ---
+    // Event Listeners
     menuToggleBtn.addEventListener('click', () => sidebar.classList.toggle('active'));
 
     newChatBtn.addEventListener('click', () => {
-        localStorage.setItem('active_session_id', crypto.randomUUID());
-        window.location.reload(); // Cara termudah untuk memulai sesi baru
+        sessionId = crypto.randomUUID();
+        localStorage.setItem('active_session_id', sessionId);
+        chatWindowTitle.textContent = "Percakapan Baru";
+        chatWindow.innerHTML = '<div class="message model"><p>Halo! Saya adalah Asisten AI untuk Pengawasan. Silakan ajukan pertanyaan atau lampirkan dokumen untuk kita diskusikan.</p></div>';
     });
 
     sessionList.addEventListener('click', (e) => {
         const target = e.target.closest('.nav-list-item');
         if (target && target.dataset.sessionId) {
-            localStorage.setItem('active_session_id', target.dataset.sessionId);
-            window.location.reload();
+            sessionId = target.dataset.sessionId;
+            localStorage.setItem('active_session_id', sessionId);
+            loadChatHistory();
         }
     });
 
@@ -60,18 +58,14 @@ document.addEventListener('DOMContentLoaded', () => {
         chatInput.style.height = `${chatInput.scrollHeight}px`;
     });
 
-
-    // --- Core Application Logic ---
-    // Mengambil dan menampilkan daftar riwayat percakapan.
+    // Core Functions
     async function loadSessions() {
         try {
-            const response = await fetch('/api/get-sessions');
-            if (!response.ok) throw new Error('Gagal mengambil data sesi dari server.');
+            const response = await fetch('/.netlify/functions/get-sessions');
+            if (!response.ok) throw new Error('Gagal mengambil data sesi');
             const sessions = await response.json();
 
             sessionList.innerHTML = '';
-            if (sessions.error) throw new Error(sessions.error);
-
             sessions.forEach(session => {
                 const item = document.createElement('div');
                 item.className = 'nav-list-item';
@@ -79,24 +73,86 @@ document.addEventListener('DOMContentLoaded', () => {
                 item.dataset.sessionId = session.session_id;
                 if (session.session_id === sessionId) {
                     item.classList.add('active');
-                    chatWindowTitle.textContent = session.title || 'Percakapan Lama';
+                    chatWindowTitle.textContent = session.title || 'Percakapan Baru';
                 }
                 sessionList.appendChild(item);
             });
         } catch (error) {
             console.error('Gagal memuat riwayat:', error);
-            sessionList.innerHTML = '<p style="color: var(--error-color); padding: 0.5rem;">Gagal memuat riwayat</p>';
+            sessionList.innerHTML = '<p class="error">Gagal memuat riwayat</p>';
         }
     }
 
-    // Mengambil dan menampilkan daftar dokumen di Knowledge Base.
-    async function loadDocuments() { /* ... (Fungsi ini tidak berubah dari versi sebelumnya) ... */ }
+    async function loadDocuments() {
+        try {
+            const response = await fetch('/.netlify/functions/get-documents');
+            if (!response.ok) throw new Error('Gagal mengambil dokumen');
+            const documents = await response.json();
 
-    // Alur Upload Modern dan Cepat dengan Feedback yang Jelas
+            documentList.innerHTML = '';
+            documents.forEach(doc => {
+                const item = document.createElement('div');
+                item.className = 'document-item';
+                item.innerHTML = `
+                    <span>${doc.file_name}</span>
+                    <button class="delete-doc-btn" data-id="${doc.id}">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                `;
+                documentList.appendChild(item);
+            });
+
+            // Tambahkan event listener untuk tombol hapus
+            document.querySelectorAll('.delete-doc-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const docId = btn.dataset.id;
+                    if (confirm('Apakah Anda yakin ingin menghapus dokumen ini?')) {
+                        try {
+                            const response = await fetch('/.netlify/functions/delete-document', {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({ id: docId })
+                            });
+                            if (!response.ok) throw new Error('Gagal menghapus dokumen.');
+                            await loadDocuments();
+                        } catch (error) {
+                            alert(`Gagal menghapus: ${error.message}`);
+                        }
+                    }
+                });
+            });
+        } catch (error) {
+            console.error('Gagal memuat dokumen:', error);
+            documentList.innerHTML = '<p class="error">Gagal memuat dokumen</p>';
+        }
+    }
+
+    async function loadChatHistory() {
+        try {
+            const response = await fetch(`/.netlify/functions/get-chat-history?sessionId=${sessionId}`);
+            if (!response.ok) throw new Error('Gagal memuat riwayat chat');
+            const history = await response.json();
+
+            chatWindow.innerHTML = '';
+            history.forEach(msg => {
+                addMessageToUI(msg.role, msg.content);
+            });
+
+            // Update judul
+            const sessionItem = document.querySelector(`.nav-list-item[data-session-id="${sessionId}"]`);
+            if (sessionItem) {
+                chatWindowTitle.textContent = sessionItem.textContent;
+            }
+        } catch (error) {
+            console.error('Gagal memuat riwayat chat:', error);
+            chatWindow.innerHTML = '<div class="message model"><p>Halo! Saya adalah Asisten AI untuk Pengawasan. Silakan ajukan pertanyaan atau lampirkan dokumen untuk kita diskusikan.</p></div>';
+        }
+    }
+
     async function handleFileUpload(file, forSessionId = null) {
         if (!file) return;
 
-        // Fungsi helper untuk notifikasi upload di chat
         const addStatusMessage = (text, type = 'status') => {
             const messageDiv = document.createElement('div');
             messageDiv.classList.add('message', 'status', type);
@@ -108,37 +164,49 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             addStatusMessage(`Mempersiapkan unggahan untuk ${file.name}...`);
 
-            const urlResponse = await fetch('/api/create-upload-url', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ fileName: file.name }) });
+            const urlResponse = await fetch('/.netlify/functions/create-upload-url', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ fileName: file.name })
+            });
+
             if (!urlResponse.ok) throw new Error('Server menolak permintaan izin upload.');
             const urlData = await urlResponse.json();
             if (urlData.error) throw new Error(urlData.error);
 
             addStatusMessage(`Mengunggah file ke penyimpanan aman...`);
-            const uploadFetch = await fetch(urlData.signedUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
+            const uploadFetch = await fetch(urlData.signedUrl, {
+                method: 'PUT',
+                headers: { 'Content-Type': file.type },
+                body: file
+            });
+
             if (!uploadFetch.ok) throw new Error('Gagal saat mengunggah file ke penyimpanan.');
 
             addStatusMessage(`Memproses dokumen di server...`);
-            const processResponse = await fetch('/api/process-document', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ storagePath: urlData.path, fileName: file.name, fileType: file.type, sessionId: forSessionId }) });
+            const processResponse = await fetch('/.netlify/functions/process-document', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ 
+                    storagePath: urlData.path, 
+                    fileName: file.name, 
+                    fileType: file.type, 
+                    sessionId: forSessionId 
+                })
+            });
+
             if (!processResponse.ok) throw new Error('Server gagal memproses dokumen.');
             const processData = await processResponse.json();
             if (processData.error) throw new Error(processData.error);
 
-            addStatusMessage(processData.message, 'success'); // Pesan sukses!
-
+            addStatusMessage(processData.message, 'success');
             if (!forSessionId) await loadDocuments();
 
         } catch (error) {
-            addStatusMessage(`Terjadi kesalahan: ${error.message}`, 'error'); // Pesan Gagal!
+            addStatusMessage(`Terjadi kesalahan: ${error.message}`, 'error');
         }
     }
 
-    // Event listener untuk tombol upload
-    kbUploadInput.addEventListener('change', (e) => handleFileUpload(e.target.files[0], null)); // Upload untuk KB
-    contextUploadBtn.addEventListener('click', () => contextUploadInput.click());
-    contextUploadInput.addEventListener('change', (e) => handleFileUpload(e.target.files[0], sessionId)); // Upload untuk sesi ini
-
-
-    // Fungsi untuk mengirim pesan chat
     async function handleSendMessage() {
         const messageText = chatInput.value.trim();
         if (!messageText) return;
@@ -149,7 +217,12 @@ document.addEventListener('DOMContentLoaded', () => {
         showLoading(true);
 
         try {
-            const response = await fetch('/api/chat', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ message: messageText, sessionId: sessionId }) });
+            const response = await fetch('/.netlify/functions/chat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ message: messageText, sessionId: sessionId })
+            });
+
             if (!response.ok) {
                 const errData = await response.json();
                 throw new Error(errData.error || 'Respon jaringan tidak baik.');
@@ -157,11 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const data = await response.json();
             addMessageToUI('model', data.reply);
-
-            // Jika ini pesan pertama, muat ulang riwayat untuk menampilkan judul baru
-            if(document.querySelectorAll('.message').length <= 4) { // Cek jika ini interaksi pertama
-                loadSessions();
-            }
+            await loadSessions(); // Refresh daftar sesi
 
         } catch (error) {
             addMessageToUI('model', `Maaf, terjadi kesalahan: ${error.message}`);
@@ -171,14 +240,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    sendBtn.addEventListener('click', handleSendMessage);
-    chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } });
+    // Event Listeners untuk upload
+    kbUploadInput.addEventListener('change', (e) => handleFileUpload(e.target.files[0], null));
+    contextUploadBtn.addEventListener('click', () => contextUploadInput.click());
+    contextUploadInput.addEventListener('change', (e) => handleFileUpload(e.target.files[0], sessionId));
 
-    // --- Initial Load ---
+    // Event Listeners untuk chat
+    sendBtn.addEventListener('click', handleSendMessage);
+    chatInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSendMessage();
+        }
+    });
+
+    // Initial Load
     async function initializeApp() {
-        // TODO: Buat fungsi backend untuk memuat pesan dari sesi yang dipilih
-        // saat ini, hanya memuat riwayat sesi dan dokumen
-        await Promise.all([loadSessions(), loadDocuments()]);
+        await loadSessions();
+        await loadDocuments();
+        await loadChatHistory();
     }
 
     initializeApp();

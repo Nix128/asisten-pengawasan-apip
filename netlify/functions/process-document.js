@@ -25,35 +25,33 @@ exports.handler = async function(event) {
         if (downloadError) throw new Error(`Gagal mengunduh file: ${downloadError.message}`);
         console.log('CHECKPOINT 3: File berhasil diunduh. Ukuran blob: ' + blob.size + ' bytes.');
 
-        // Langkah 2: Konversi Blob ke Buffer Node.js
-        const buffer = Buffer.from(await blob.arrayBuffer());
+        // PERBAIKAN UTAMA: Konversi Blob ke Buffer yang benar
+        const arrayBuffer = await blob.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
         console.log('CHECKPOINT 4: Berhasil mengonversi blob ke buffer.');
 
         // Langkah 3: Ekstraksi Teks
         let textContent = '';
         console.log(`CHECKPOINT 5: Memulai ekstraksi teks untuk tipe: ${fileType}`);
 
-        if (fileType === 'application/pdf') {
-            try {
+        try {
+            if (fileType === 'application/pdf') {
                 const data = await pdf(buffer);
                 textContent = data.text;
-            } catch (pdfError) {
-                throw new Error(`Gagal mem-parsing PDF: ${pdfError.message}`);
-            }
-        } else if (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-            try {
+            } else if (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
                 const { value } = await mammoth.extractRawText({ buffer });
                 textContent = value;
-            } catch (docxError) {
-                throw new Error(`Gagal mem-parsing DOCX: ${docxError.message}`);
+            } else if (fileType.startsWith('text/')) {
+                textContent = buffer.toString('utf-8');
+            } else {
+                console.warn(`Peringatan: Tipe file '${fileType}' tidak didukung`);
+                textContent = `Konten tidak dapat diekstrak untuk tipe file: ${fileType}.`;
             }
-        } else if (fileType.startsWith('text/')) {
-            textContent = buffer.toString('utf-8');
-        } else {
-            // Untuk sekarang, kita tidak melempar error, tapi memberi peringatan.
-            console.warn(`Peringatan: Tipe file '${fileType}' tidak didukung, konten teks akan kosong.`);
-            textContent = `Konten tidak dapat diekstrak untuk tipe file: ${fileType}.`;
+        } catch (extractionError) {
+            console.error('Error ekstraksi teks:', extractionError);
+            textContent = `Gagal mengekstrak konten: ${extractionError.message}`;
         }
+
         console.log('CHECKPOINT 6: Ekstraksi teks selesai. Panjang teks: ' + textContent.length + ' karakter.');
 
         // Langkah 4: Simpan ke Database

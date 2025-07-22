@@ -5,11 +5,10 @@
 
 [functions]
   node_bundler = "esbuild"
+  timeout = 30 # Timeout global 30 detik
 
-# Perintah ini memberitahu Netlify untuk memberikan waktu lebih
-# khusus untuk fungsi process-document
 [functions."process-document"]
-  timeout = 25 # Naikkan timeout menjadi 25 detik
+  timeout = 30 # Timeout khusus untuk process-document
 
 [[redirects]]
   from = "/api/*"
