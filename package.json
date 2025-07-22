@@ -1,22 +1,33 @@
 {
-  "name": "ai-assistant-pengawasan",
+  "name": "ai-asisten-pengawasan",
   "version": "1.0.0",
-  "description": "AI Assistant for Surveillance using Gemini 1.5 Pro and Supabase on Netlify",
+  "description": "AI Agent untuk Analisis Pengawasan APIP dengan arsitektur serverless.",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "netlify dev"
   },
-  "keywords": [],
-  "author": "Your Name (Optional)",
+  "keywords": [
+    "ai",
+    "pengawasan",
+    "netlify",
+    "supabase",
+    "gemini",
+    "serverless"
+  ],
+  "author": "Nixon",
   "license": "ISC",
   "dependencies": {
     "@google/generative-ai": "^0.14.1",
     "@supabase/supabase-js": "^2.43.4",
-    "formidable": "^3.5.1",
-    "mammoth": "^1.6.0",
-    "bcryptjs": "^2.4.3",
-    "formidable": "^3.5.1",
-    "pdf-parse": "^1.1.1"
+    "axios": "^1.10.0",
+    "dotenv": "^16.4.5",
+    "express": "^5.1.0",
+    "formidable": "^3.5.4",
+    "googleapis": "^137.1.0",
+    "mammoth": "^1.7.2",
+    "pdf-parse": "^1.1.1",
+    "tesseract.js": "^6.0.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "netlify-cli": "^22.3.0"

@@ -1,37 +1,26 @@
+// netlify/functions/delete-document.js
+require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
-);
+exports.handler = async function(event) {
+    try {
+        const { id } = JSON.parse(event.body);
 
-exports.handler = async function(event, context) {
-  if (event.httpMethod !== 'DELETE') {
-    return { statusCode: 405, body: 'Method Not Allowed' };
-  }
+        // 1. Dapatkan path file dari database
+        const { data: doc, error: fetchError } = await supabase.from('documents').select('storage_path').eq('id', id).single();
+        if (fetchError) throw new Error('Dokumen tidak ditemukan.');
 
-  const { document_name } = event.queryStringParameters;
+        // 2. Hapus file dari Supabase Storage
+        const { error: storageError } = await supabase.storage.from('knowledge_base').remove([doc.storage_path]);
+        if (storageError) console.warn("Peringatan: Gagal menghapus file dari storage, mungkin sudah terhapus.", storageError.message);
 
-  if (!document_name) {
-    return { statusCode: 400, body: JSON.stringify({ error: 'Document name is required' }) };
-  }
+        // 3. Hapus record dari tabel database
+        const { error: dbError } = await supabase.from('documents').delete().eq('id', id);
+        if (dbError) throw dbError;
 
-  try {
-    const { error } = await supabase
-      .from('knowledge_base')
-      .delete()
-      .eq('document_name', document_name);
-
-    if (error) throw error;
-
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ message: 'Document deleted' })
-    };
-  } catch (error) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: error.message })
-    };
-  }
+        return { statusCode: 200, body: JSON.stringify({ message: 'Dokumen berhasil dihapus.' }) };
+    } catch (error) {
+        return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
+    }
 };

@@ -1,182 +1,42 @@
+// netlify/functions/upload-document.js
+require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 const pdf = require('pdf-parse');
 const mammoth = require('mammoth');
-const formidable = require('formidable');
-const fs = require('fs');
-const util = require('util');
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
-);
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-async function getEmbedding(text) {
-  try {
-    const model = genAI.getGenerativeModel({ model: 'embedding-001' });
-    const result = await model.embedContent(text);
-    return result.embedding.values;
-  } catch (error) {
-    console.error('Error getting embedding:', error);
-    throw error;
-  }
+async function parseContent(buffer, fileType) {
+    if (fileType === 'application/pdf') return (await pdf(buffer)).text;
+    if (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return (await mammoth.extractRawText({ buffer })).value;
+    if (fileType.startsWith('text/')) return buffer.toString('utf-8');
+    throw new Error('Tipe file tidak didukung untuk ekstraksi konten.');
 }
 
-function chunkText(text, chunkSize = 1000, overlap = 100) {
-  const chunks = [];
-  let i = 0;
-  while (i < text.length) {
-    const end = Math.min(i + chunkSize, text.length);
-    chunks.push(text.substring(i, end));
-    i += (chunkSize - overlap);
-  }
-  return chunks.filter(chunk => chunk.trim().length > 0);
-}
-
-// Fallback untuk ekstraksi teks dari PDF
-function extractTextFromPDFFallback(buffer) {
-  // Coba ambil teks dari buffer (hanya karakter ASCII)
-  const text = buffer.toString('ascii', 0, 1024 * 1024); // Ambil 1MB pertama
-  // Hapus karakter non-ASCII dan kontrol
-  return text.replace(/[^\x20-\x7E]/g, '');
-}
-
-// Convert formidable parse to promise
-const parseForm = (event) => {
-  return new Promise((resolve, reject) => {
-    const form = new formidable.IncomingForm();
-    form.parse(event, (err, fields, files) => {
-      if (err) reject(err);
-      else resolve({ fields, files });
-    });
-  });
-};
-
-exports.handler = async function(event, context) {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method Not Allowed' };
-  }
-
-  // Handle binary file upload
-  if (event.isBase64Encoded) {
-    event.body = Buffer.from(event.body, 'base64').toString('binary');
-  }
-
-  let fields, files;
-  try {
-    // Parse form data
-    ({ fields, files } = await parseForm(event));
-  } catch (parseError) {
-    console.error('Error parsing form data:', parseError);
-    return { statusCode: 400, body: JSON.stringify({ error: 'Failed to parse form data' }) };
-  }
-
-  const documentName = fields.documentName ? fields.documentName : null;
-  const contentText = fields.content ? fields.content : null;
-  const uploadedFiles = Array.isArray(files.files) ? files.files : [files.files].filter(Boolean);
-
-  if (!documentName) {
-    return { statusCode: 400, body: JSON.stringify({ error: 'Document name is required' }) };
-  }
-
-  let allChunks = [];
-
-  // Process text content
-  if (contentText) {
-    const chunks = chunkText(contentText);
-    for (const chunk of chunks) {
-      const embedding = await getEmbedding(chunk);
-      allChunks.push({
-        document_name: documentName,
-        content: chunk,
-        embedding
-      });
-    }
-  }
-
-  // Process uploaded files
-  for (const file of uploadedFiles) {
-    if (!file || !file.filepath) continue;
-
-    const filePath = file.filepath;
-    let fileContent = '';
-
+exports.handler = async function(event) {
     try {
-      if (file.mimetype === 'application/pdf') {
-        const dataBuffer = fs.readFileSync(filePath);
-        try {
-          const data = await pdf(dataBuffer);
-          fileContent = data.text;
-        } catch (pdfError) {
-          console.error('PDF parse error, using fallback:', pdfError);
-          fileContent = extractTextFromPDFFallback(dataBuffer);
-        }
-      } else if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-        const result = await mammoth.extractRawText({ path: filePath });
-        fileContent = result.value;
-      } else if (file.mimetype === 'text/plain') {
-        fileContent = fs.readFileSync(filePath, 'utf8');
-      } else {
-        console.warn(`Unsupported file type: ${file.mimetype}`);
-        continue;
-      }
+        const { fileName, fileType, fileData } = JSON.parse(event.body);
+        const buffer = Buffer.from(fileData, 'base64');
+        const storagePath = `public/${Date.now()}_${fileName}`;
 
-      // Skip empty files
-      if (!fileContent.trim()) {
-        console.warn(`File ${file.originalFilename} is empty`);
-        continue;
-      }
+        // 1. Upload file ke Supabase Storage
+        const { error: uploadError } = await supabase.storage.from('knowledge_base').upload(storagePath, buffer, { contentType: fileType });
+        if (uploadError) throw uploadError;
 
-      const chunks = chunkText(fileContent);
-      for (const chunk of chunks) {
-        const embedding = await getEmbedding(chunk);
-        allChunks.push({
-          document_name: documentName,
-          content: chunk,
-          embedding
+        // 2. Parse konten teks
+        const textContent = await parseContent(buffer, fileType);
+
+        // 3. Simpan metadata & konten teks ke database
+        const { error: dbError } = await supabase.from('documents').insert({
+            file_name: fileName,
+            file_type: fileType,
+            storage_path: storagePath,
+            text_content: textContent,
         });
-      }
-    } catch (fileError) {
-      console.error(`Error processing file ${file.originalFilename}:`, fileError);
+        if (dbError) throw dbError;
+
+        return { statusCode: 200, body: JSON.stringify({ message: `Dokumen '${fileName}' berhasil ditambahkan ke Knowledge Base.` }) };
+    } catch (error) {
+        return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
     }
-  }
-
-  if (allChunks.length === 0) {
-    return { statusCode: 400, body: JSON.stringify({ error: 'No valid content found' }) };
-  }
-
-  try {
-    // Insert in batches of 100
-    const batchSize = 100;
-    for (let i = 0; i < allChunks.length; i += batchSize) {
-      const batch = allChunks.slice(i, i + batchSize);
-      const { error } = await supabase
-        .from('knowledge_base')
-        .insert(batch);
-
-      if (error) {
-        console.error('Supabase insert error:', error);
-        return { 
-          statusCode: 500, 
-          body: JSON.stringify({ error: `Failed to insert into Supabase: ${error.message}` }) 
-        };
-      }
-    }
-
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ 
-        message: `Document '${documentName}' processed successfully with ${allChunks.length} chunks` 
-      })
-    };
-
-  } catch (error) {
-    console.error('Error processing document:', error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: error.message || 'Internal Server Error' })
-    };
-  }
 };

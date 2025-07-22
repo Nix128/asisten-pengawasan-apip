@@ -1,12 +1,7 @@
 [build]
-  command = "npm install" # Perintah untuk menginstal dependensi saat Netlify membangun proyek
-  functions = "netlify/functions" # Lokasi fungsi Netlify Anda
-  publish = "public" # Folder yang akan disajikan sebagai frontend aplikasi Anda
+  command = "npm install"
+  functions = "netlify/functions"
+  publish = "public"
 
-# Aturan redirect yang bermasalah telah dihapus karena Netlify sudah menangani jalur fungsi secara otomatis.
-# Kita hanya perlu aturan fallback untuk SPA (Single Page Application)
-
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+[functions]
+  node_bundler = "esbuild"
