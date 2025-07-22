@@ -8,19 +8,18 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
-    <!-- Ganti dengan kit Font Awesome Anda, atau gunakan ikon SVG -->
-    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+    <!-- Pastikan Anda menggunakan Kit Font Awesome yang valid atau ganti dengan ikon SVG -->
+    <script src="https://kit.fontawesome.com/1a2b3c4d5e.js" crossorigin="anonymous"></script> <!-- CONTOH, GANTI DENGAN ID ANDA -->
 </head>
 <body>
     <div class="app-container">
-        <!-- Sidebar yang bisa disembunyikan -->
+        <!-- Sidebar -->
         <aside id="sidebar" class="sidebar">
             <header class="sidebar-header">
                 <button id="new-chat-btn" class="new-chat-btn">
                     <i class="fas fa-plus"></i> Percakapan Baru
                 </button>
             </header>
-            
             <nav class="sidebar-nav">
                 <section>
                     <h3>Riwayat</h3>
@@ -37,7 +36,7 @@
             </nav>
         </aside>
 
-        <!-- Area Chat Utama, ini adalah flex container untuk header, window, dan input -->
+        <!-- Area Konten Utama -->
         <main class="chat-area">
             <header class="chat-header">
                 <button id="menu-toggle-btn" class="icon-btn">
@@ -46,28 +45,31 @@
                 <h2 id="chat-title">Percakapan Baru</h2>
             </header>
             
-            <!-- Jendela chat, akan mengisi sisa ruang -->
             <div id="chat-window" class="chat-window">
                 <div class="message model">
-                    <p>Halo! Saya adalah Asisten AI untuk Pengawasan.</p>
-                    <p>Anda bisa bertanya, mengunggah dokumen ke Knowledge Base, atau melampirkan file sementara untuk percakapan ini menggunakan ikon penjepit kertas.</p>
+                    <p>Halo! Saya adalah Asisten AI untuk Pengawasan. Silakan ajukan pertanyaan atau lampirkan dokumen untuk kita diskusikan.</p>
                 </div>
             </div>
             
-            <!-- Area input, akan menempel di bawah -->
+            <!-- Area Input yang diperbaiki -->
             <div class="chat-input-section">
                 <div id="loading-indicator" class="loading-indicator" style="display: none;">
                     <div class="dot"></div><div class="dot"></div><div class="dot"></div>
                 </div>
                 
-                <div class="chat-input-area">
-                    <label for="context-upload-input" id="context-upload-btn" class="icon-btn">
+                <div class="chat-input-container">
+                    <!-- Tombol Upload Kontekstual -->
+                    <button id="context-upload-btn" class="icon-btn">
                         <i class="fas fa-paperclip"></i>
-                    </label>
+                    </button>
                     <input type="file" id="context-upload-input" accept=".pdf,.docx,.txt" hidden>
                     
-                    <textarea id="chat-input" placeholder="Ketik pesan Anda di sini..." rows="1"></textarea>
-                    
+                    <!-- Textarea untuk mengetik -->
+                    <div class="textarea-wrapper">
+                        <textarea id="chat-input" placeholder="Ketik pesan Anda di sini..." rows="1"></textarea>
+                    </div>
+
+                    <!-- Tombol Kirim -->
                     <button id="send-btn" class="send-btn">
                         <i class="fas fa-paper-plane"></i>
                     </button>
@@ -75,9 +77,6 @@
             </div>
         </main>
     </div>
-
-    <!-- Ganti dengan ID kit Font Awesome Anda -->
-    <script src="https://kit.fontawesome.com/YOUR_KIT_ID.js" crossorigin="anonymous"></script>
     <script src="script.js"></script>
 </body>
 </html>
