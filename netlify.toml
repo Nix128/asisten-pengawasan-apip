@@ -1,19 +1,17 @@
 [build]
-  command = "npm install && npm run build"
+  command = "npm install"
   functions = "netlify/functions"
   publish = "public"
 
 [functions]
   node_bundler = "esbuild"
-  
-  [functions.timeout]
-  default = 30  # Timeout default 30 detik
 
-[functions.process-document]
-  timeout = 30  # Timeout khusus untuk process-document
+# Perintah ini memberitahu Netlify untuk memberikan waktu lebih
+# khusus untuk fungsi process-document
+[functions."process-document"]
+  timeout = 25 # Naikkan timeout menjadi 25 detik
 
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
-  force = true
