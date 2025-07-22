@@ -1,68 +1,81 @@
 require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
-const pdf = require('pdf-parse'); // Memastikan import di tingkat atas
+const pdf = require('pdf-parse');
 const mammoth = require('mammoth');
 
-// Inisialisasi klien Supabase di luar handler untuk efisiensi
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
-// --- Fungsi Handler Utama Netlify ---
 exports.handler = async function(event) {
-    // Selalu pastikan kita hanya memproses permintaan POST
+    console.log('CHECKPOINT 0: Fungsi process-document dipanggil.');
+
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, body: 'Method Not Allowed' };
     }
 
     try {
         const { storagePath, fileName, fileType, sessionId } = JSON.parse(event.body);
+        console.log(`CHECKPOINT 1: Memproses file '${fileName}' (${fileType}) dari path: ${storagePath}`);
 
-        // 1. Download file dari Supabase Storage sebagai Buffer
+        // Langkah 1: Download file dari Supabase Storage
+        console.log('CHECKPOINT 2: Mengunduh file dari Supabase Storage...');
         const { data: blob, error: downloadError } = await supabase.storage
             .from('knowledge-base')
             .download(storagePath);
 
-        if (downloadError) {
-            throw new Error(`Gagal mengunduh file dari storage: ${downloadError.message}`);
-        }
+        if (downloadError) throw new Error(`Gagal mengunduh file: ${downloadError.message}`);
+        console.log('CHECKPOINT 3: File berhasil diunduh. Ukuran blob: ' + blob.size + ' bytes.');
 
-        // Konversi Blob ke Buffer Node.js
+        // Langkah 2: Konversi Blob ke Buffer Node.js
         const buffer = Buffer.from(await blob.arrayBuffer());
+        console.log('CHECKPOINT 4: Berhasil mengonversi blob ke buffer.');
 
-        // 2. Parse konten teks berdasarkan tipe file
+        // Langkah 3: Ekstraksi Teks
         let textContent = '';
+        console.log(`CHECKPOINT 5: Memulai ekstraksi teks untuk tipe: ${fileType}`);
+
         if (fileType === 'application/pdf') {
-            const data = await pdf(buffer);
-            textContent = data.text;
+            try {
+                const data = await pdf(buffer);
+                textContent = data.text;
+            } catch (pdfError) {
+                throw new Error(`Gagal mem-parsing PDF: ${pdfError.message}`);
+            }
         } else if (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-            const { value } = await mammoth.extractRawText({ buffer });
-            textContent = value;
+            try {
+                const { value } = await mammoth.extractRawText({ buffer });
+                textContent = value;
+            } catch (docxError) {
+                throw new Error(`Gagal mem-parsing DOCX: ${docxError.message}`);
+            }
         } else if (fileType.startsWith('text/')) {
             textContent = buffer.toString('utf-8');
         } else {
-            throw new Error(`Tipe file '${fileType}' tidak didukung untuk ekstraksi konten.`);
+            // Untuk sekarang, kita tidak melempar error, tapi memberi peringatan.
+            console.warn(`Peringatan: Tipe file '${fileType}' tidak didukung, konten teks akan kosong.`);
+            textContent = `Konten tidak dapat diekstrak untuk tipe file: ${fileType}.`;
         }
+        console.log('CHECKPOINT 6: Ekstraksi teks selesai. Panjang teks: ' + textContent.length + ' karakter.');
 
-        // 3. Simpan metadata dan teks hasil ekstraksi ke database
+        // Langkah 4: Simpan ke Database
+        console.log('CHECKPOINT 7: Menyimpan metadata ke database...');
         const { error: dbError } = await supabase.from('documents').insert({
             file_name: fileName,
             file_type: fileType,
             storage_path: storagePath,
             text_content: textContent,
-            session_id: sessionId || null, // Akan null jika untuk KB, atau berisi ID jika kontekstual
+            session_id: sessionId || null,
         });
 
-        if (dbError) {
-            throw new Error(`Gagal menyimpan metadata ke database: ${dbError.message}`);
-        }
+        if (dbError) throw new Error(`Gagal menyimpan ke database: ${dbError.message}`);
+        console.log('CHECKPOINT 8: Berhasil menyimpan ke database.');
 
-        // 4. Kirim respons sukses ke frontend
         return {
             statusCode: 200,
-            body: JSON.stringify({ message: `Dokumen '${fileName}' berhasil diproses dan siap digunakan.` }),
+            body: JSON.stringify({ message: `Dokumen '${fileName}' berhasil diproses.` }),
         };
 
     } catch (error) {
-        console.error('Error dalam fungsi process-document:', error);
+        console.error('FATAL ERROR dalam process-document:', error);
         return {
             statusCode: 500,
             body: JSON.stringify({ error: error.message }),

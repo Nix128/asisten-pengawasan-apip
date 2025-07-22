@@ -6,9 +6,11 @@
 [functions]
   node_bundler = "esbuild"
 
-# -- Tambahkan blok ini --
-# Aturan ini secara resmi memberitahu Netlify:
-# "Setiap permintaan yang datang ke /api/sesuatu, teruskan ke fungsi /.netlify/functions/sesuatu"
+# Perintah ini memberitahu Netlify untuk memberikan waktu lebih
+# khusus untuk fungsi process-document
+[functions."process-document"]
+  timeout = 25 # Naikkan timeout menjadi 25 detik
+
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
