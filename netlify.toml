@@ -2,27 +2,21 @@
   command = "npm install"
   functions = "netlify/functions"
   publish = "public"
-  # Menentukan versi Node.js yang akan digunakan oleh Netlify
-  # untuk proses build dan juga untuk menjalankan fungsi-fungsi Anda.
-  # Node.js 18.x mendukung sintaks JavaScript modern (ES6+) seperti 'const'.
-  NODE_VERSION = "18"
+
+# Versi Node.js digunakan di Netlify melalui file `.nvmrc` atau di environment, bukan dari toml.
+# Jadi 'NODE_VERSION = "18"' dihapus karena tidak valid di bagian ini.
 
 [functions]
-  # Bundler yang digunakan untuk fungsi-fungsi Anda (sudah ada).
   node_bundler = "esbuild"
-  # Baris 'node_runtime = "nodejs18.x"' telah dihapus dari sini
-  # karena menyebabkan error konfigurasi. NODE_VERSION di atas sudah cukup.
+  external_node_modules = [
+    "@supabase/supabase-js",
+    "@google/generative-ai",
+    "googleapis",
+    "dotenv"
+  ]
 
-# Konfigurasi spesifik untuk fungsi 'process-document'
-# Ini memberikan waktu eksekusi yang lebih lama (25 detik) untuk fungsi ini,
-# yang mungkin diperlukan untuk pemrosesan file besar.
-[functions."process-document"]
-  timeout = 25
-
-# Konfigurasi pengalihan (redirects) untuk API Anda.
-# Ini mengarahkan semua permintaan ke '/api/*' ke fungsi Netlify yang sesuai.
+# Redirect API ke Functions (contoh: /api/chat → /.netlify/functions/chat)
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
-
