@@ -8,36 +8,58 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
-    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script> <!-- Ganti dengan kit Font Awesome Anda jika punya -->
+    <!-- Ganti dengan kit Font Awesome Anda, atau gunakan ikon SVG -->
+    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
 </head>
 <body>
     <div class="app-container">
-        <aside class="sidebar">
+        <!-- Sidebar yang bisa disembunyikan -->
+        <aside id="sidebar" class="sidebar">
             <header class="sidebar-header">
-                <h2>Knowledge Base</h2>
-                <label for="file-upload-input" class="upload-kb-btn">
-                    <i class="fas fa-plus"></i> Tambah Dokumen
-                </label>
-                <input type="file" id="file-upload-input" accept=".pdf,.docx,.txt" hidden>
+                <button id="new-chat-btn" class="new-chat-btn">
+                    <i class="fas fa-plus"></i> Percakapan Baru
+                </button>
             </header>
-            <div id="document-list" class="document-list">
-                <!-- Daftar dokumen akan dimuat di sini -->
-            </div>
+            
+            <nav class="sidebar-nav">
+                <section>
+                    <h3>Riwayat</h3>
+                    <div id="session-list" class="nav-list"></div>
+                </section>
+                <section>
+                    <h3>Knowledge Base</h3>
+                    <div id="document-list" class="nav-list"></div>
+                    <label for="kb-upload-input" class="upload-kb-btn">
+                        <i class="fas fa-upload"></i> Tambah Dokumen
+                    </label>
+                    <input type="file" id="kb-upload-input" accept=".pdf,.docx,.txt" hidden>
+                </section>
+            </nav>
         </aside>
 
+        <!-- Area Chat Utama -->
         <main class="chat-area">
+            <header class="chat-header">
+                <!-- Tombol "Hamburger" untuk menampilkan sidebar di layar kecil -->
+                <button id="menu-toggle-btn" class="icon-btn">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <h2 id="chat-title">Percakapan Baru</h2>
+            </header>
+            
             <div id="chat-window" class="chat-window">
-                <div class="message model">
-                    <p>Halo! Saya adalah Asisten AI untuk Pengawasan.</p>
-                    <p>Anda bisa bertanya kepada saya, atau tambahkan dokumen ke Knowledge Base untuk saya pelajari.</p>
-                </div>
+                <!-- Pesan chat akan muncul di sini -->
             </div>
+            
             <div id="loading-indicator" class="loading-indicator" style="display: none;">
-                <div class="dot"></div>
-                <div class="dot"></div>
-                <div class="dot"></div>
+                <div class="dot"></div><div class="dot"></div><div class="dot"></div>
             </div>
+            
             <div class="chat-input-area">
+                <button id="context-upload-btn" class="icon-btn">
+                    <i class="fas fa-paperclip"></i>
+                </button>
+                <input type="file" id="context-upload-input" accept=".pdf,.docx,.txt" hidden>
                 <textarea id="chat-input" placeholder="Ketik pesan Anda di sini..." rows="1"></textarea>
                 <button id="send-btn" class="send-btn">
                     <i class="fas fa-paper-plane"></i>
