@@ -10,9 +10,8 @@
 [functions]
   # Bundler yang digunakan untuk fungsi-fungsi Anda (sudah ada).
   node_bundler = "esbuild"
-  # Memastikan runtime Node.js yang sesuai dengan versi yang ditentukan di atas
-  # untuk eksekusi fungsi.
-  node_runtime = "nodejs18.x"
+  # Baris 'node_runtime = "nodejs18.x"' telah dihapus dari sini
+  # karena menyebabkan error konfigurasi. NODE_VERSION di atas sudah cukup.
 
 # Konfigurasi spesifik untuk fungsi 'process-document'
 # Ini memberikan waktu eksekusi yang lebih lama (25 detik) untuk fungsi ini,
